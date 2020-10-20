@@ -61,7 +61,8 @@ class conformersFW(Firework):
             RunCRESTDirect(
                 crest_cmd=crest_cmd,
                 input_file=input_file,
-                crest_flags=crest_flags
+                crest_flags=crest_flags,
+                output_file=output_file
             )
         )
         t.append(

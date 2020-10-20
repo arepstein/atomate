@@ -40,14 +40,13 @@ def get_wf_simpleConformerSearch(molecule,
         Workflow
     """
 
-    # Optimize the molecule in vacuum
     fw1 = conformersFW(
         molecule=molecule,
         name="simple_conformer_search",
         crest_cmd=crest_cmd,
-        db_file=db_file)
-
-    # Optimize the molecule in PCM
+        db_file=db_file,
+        crest_flags="-squick"
+    )
 
     wfname = "{}:{}".format(molecule.composition.reduced_formula, name)
 

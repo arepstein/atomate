@@ -48,18 +48,14 @@ class RunCRESTDirect(FiretaskBase):
     def run_task(self, fw_spec):
         cmd = env_chk(self["crest_cmd"], fw_spec)
         input_file = self.get("input_file", "crest_in.xyz")
-        cmd = cmd + " " + input_file
+        output_file = self.get("output_file", "crest_out.out")
+        crest_flags = self.get("crest_flags", "")
+        full_cmd = cmd + " " + input_file + " " + crest_flags + ">" + output_file
 
-        # if self["crest_flags"]:
-        #     for flag, arg in self["crest_flags"].items():
-        #         cmd = cmd + " -" + flag
-        #         if arg:
-        #             cmd = cmd + " " + arg
-
-        logger.info("Running command: {}".format(cmd))
-        return_code = subprocess.call(cmd, shell=True)
+        logger.info("Running command: {}".format(full_cmd))
+        return_code = subprocess.call(full_cmd, shell=True)
         logger.info("Command {} finished running with return code: {}".format(
-            cmd, return_code))
+            full_cmd, return_code))
 
 
 @explicit_serialize

@@ -23,7 +23,7 @@ __maintainer__ = "Alex Epstein"
 __email__ = "aepstein@lbl.gov"
 __status__ = "Alpha"
 __date__ = "10/01/19"
-__credits__ = "Ryan Kingsbury, Evan Spotte-Smith"
+__credits__ = "Sam Blau, Ryan Kingsbury, Evan Spotte-Smith"
 
 logger = get_logger(__name__)
 
