@@ -161,8 +161,7 @@ class CRESTDrone(AbstractDrone):
         Process a CREST calculation, aka an input/output pair.
         """
         crest_input_file = os.path.join(dir_name, input_file)
-        crest_output_file = os.path.join(dir_name, output_file)
-        CO = CRESTOutput(crest_output_file)
+        CO = CRESTOutput(path=dir_name, output_filename=output_file)
         d = {}
         d["input"] = CO.cmd_options
         d["input"]["molecule"] = Molecule.from_file(crest_input_file)
