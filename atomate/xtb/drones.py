@@ -39,12 +39,11 @@ class CRESTDrone(AbstractDrone):
     # I haven't worried about this yet
     schema = {
         "root": {
-            "dir_name", "input", "output", "smiles",
-            "walltime", "cputime", "formula_pretty", "formula_anonymous",
-            "chemsys", "pointgroup"
+            "dir_name", "input", "output", "formula_pretty", "formula_anonymous",
+            "properly_terminated"
         },
-        "input": {"initial_molecule", "job_type"},
-        "output": {"initial_molecule", "job_type"}
+        "input": {"initial_molecule", "cmd_options"},
+        "output": {"lowest_energy_structure", "sorted_structures_energies"}
     }
 
     def __init__(self, runs=None, additional_fields=None):
@@ -82,10 +81,10 @@ class CRESTDrone(AbstractDrone):
         if len(crestinput_files) > 0 and len(crestoutput_files) > 0:
             d = self.generate_doc(path, crestinput_files, crestoutput_files,
                                   multirun)
-            self.post_process(path, d)
         else:
             raise ValueError("Either input or output not found!")
         self.validate_doc(d)
+        print(d["output"].keys())
         return jsanitize(d, strict=True, allow_bson=True)
 
     def filter_files(self, path, file_pattern):
@@ -132,21 +131,32 @@ class CRESTDrone(AbstractDrone):
                 "version": CRESTDrone.__version__
             }
             d["dir_name"] = fullpath
-            if multirun:
-                d["calcs_reversed"] = self.process_crestrun(
-                    dir_name, crestinput_files, crestoutput_files)
-            else:
-                d["calcs_reversed"] = [
-                    self.process_crestrun(dir_name, taskname,
-                                          crestinput_files.get(taskname),
-                                          output_filename)
-                    for taskname, output_filename in crestoutput_files.items()
-                ]
+            d["calcs_reversed"] = [
+                self.process_crestrun(dir_name, taskname,
+                                      crestinput_files.get(taskname),
+                                      output_filename)
+                for taskname, output_filename in crestoutput_files.items()
+            ]
+
             d["calcs_reversed"].reverse()
             d_calc_init = d["calcs_reversed"][-1]
             d_calc_final = d["calcs_reversed"][0]
-            d["state"] = "successful" if d_calc_final[
-                "properly_terminated"] else "unsuccessful"
+
+            d["input"] = {
+                "initial_molecule": d_calc_init["input"]["initial_molecule"],
+                "cmd_options": d_calc_init["input"]["cmd_options"]
+            }
+            d["output"] = {
+                "initial_molecule": d_calc_final["output"]["initial_molecule"],
+                "lowest_energy_structure": d_calc_final["output"]["lowest_energy_structure"],
+                "sorted_structures_energies": d_calc_final["output"]["sorted_structures_energies"]
+            }
+
+            d["state"] = "successful" if d_calc_final["properly_terminated"] else "unsuccessful"
+
+            comp = d["output"]["initial_molecule"].composition
+            d["formula_pretty"] = comp.reduced_formula
+            d["formula_anonymous"] = comp.anonymized_formula
             return d
 
         except Exception:
@@ -161,13 +171,16 @@ class CRESTDrone(AbstractDrone):
         Process a CREST calculation, aka an input/output pair.
         """
         crest_input_file = os.path.join(dir_name, input_file)
-        CO = CRESTOutput(path=dir_name, output_filename=output_file)
+        c_out = CRESTOutput(path=dir_name, output_filename=output_file)
         d = {}
-        d["input"] = CO.cmd_options
-        d["input"]["molecule"] = Molecule.from_file(crest_input_file)
+        d["input"] = {}
+        d["input"]["cmd_options"] = c_out.cmd_options
+        d["input"]["initial_molecule"] = Molecule.from_file(crest_input_file)
         d["output"] = {}
-        d["output"]["lowest_energy_structure"] = CO.lowest_energy_structure
-        d["input"]["sorted_structures_energies"] = CO.sorted_structures_energies
+        d["output"]["initial_molecule"] = c_out.input_structure
+        d["output"]["lowest_energy_structure"] = c_out.lowest_energy_structure
+        d["output"]["sorted_structures_energies"] = c_out.sorted_structures_energies
+        d["properly_terminated"] = c_out.properly_terminated
         d["task"] = {"type": taskname, "name": taskname}
         return d
 
@@ -179,7 +192,7 @@ class CRESTDrone(AbstractDrone):
         for k, v in self.schema.items():
             diff = v.difference(set(d.get(k, d).keys()))
             if diff:
-                logger.warn("The keys {0} in {1} not set".format(diff, k))
+                logger.warning("The keys {0} in {1} not set".format(diff, k))
 
     @staticmethod
     def get_valid_paths(self, path):
