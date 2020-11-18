@@ -9,47 +9,32 @@ from fireworks import FWorker
 from fireworks.core.rocket_launcher import rapidfire
 from atomate.utils.testing import AtomateTest
 from pymatgen.core import Molecule
-from pymatgen.io.qchem.inputs import QCInput
-from atomate.qchem.powerups import use_fake_qchem
-from atomate.qchem.workflows.base.double_FF_opt import get_wf_double_FF_opt
+from atomate.xtb.workflows.base.conformer_search import get_wf_simpleConformerSearch
 
-__author__ = "Samuel Blau"
+__author__ = "Alex Epstein"
 __copyright__ = "Copyright 2018, The Materials Project"
 __version__ = "0.1"
-__maintainer__ = "Samuel Blau"
-__email__ = "samblau1@gmail.com"
+__maintainer__ = "Alex Epstein"
+__email__ = "aepstein@lbl.gov"
 __status__ = "Alpha"
 __date__ = "6/1/18"
-__credits__ = "Brandon Wood, Shyam Dwaraknath"
+__credits__ = "Sam Blau"
 
 module_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)))
 db_dir = os.path.join(module_dir, "..", "..", "..", "common", "test_files")
 
 
-class TestDoubleFFOpt(AtomateTest):
-    def test_double_FF_opt(self):
+class TestSimpleConformerSearch(AtomateTest):
+    def test_simple_conformer_search(self):
         # location of test files
-        test_double_FF_files = os.path.join(module_dir, "..", "..",
-                                            "test_files", "double_FF_wf")
-        # define starting molecule and workflow object
-        initial_qcin = QCInput.from_file(
-            os.path.join(test_double_FF_files, "block", "launcher_first",
-                         "mol.qin.opt_0"))
-        initial_mol = initial_qcin.molecule
+        test_csearch_files = os.path.join(module_dir, "..", "..",
+                                            "test_files", "conformer_search")
+        # define starting molecule
+        initial_mol = Molecule.from_file(os.path.join(test_csearch_files, "crest_in.xyz"))
 
-        real_wf = get_wf_double_FF_opt(
-            molecule=initial_mol,
-            pcm_dielectric=10.0,
-            max_cores=32,
-            qchem_input_params={
-                "basis_set": "6-311++g**",
-                "overwrite_inputs": {
-                    "rem": {
-                        "sym_ignore": "true",
-                        "scf_algorithm": "diis"
-                    }
-                }
-            })
+        real_wf = get_wf_simpleConformerSearch(
+            molecule=initial_mol
+            )
         # use powerup to replace run with fake run
         ref_dirs = {
             "first_FF_no_pcm":
