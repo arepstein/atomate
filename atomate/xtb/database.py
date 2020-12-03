@@ -7,26 +7,26 @@ from __future__ import division, print_function, unicode_literals, absolute_impo
 from atomate.utils.database import CalcDb
 from atomate.utils.utils import get_logger
 
-__author__ = "Brandon Wood, Samuel Blau"
-__credits__ = "Kiran Mathew, Anubhav Jain"
-__email__ = "b.wood@berkeley.edu"
+__author__ = "Alex Epstein"
+__credits__ = "Sam Blau, Brandon Wood"
+__email__ = "aepstein@lbl.gov"
 
 logger = get_logger(__name__)
 
 
-class QChemCalcDb(CalcDb):
+class CRESTCalcDb(CalcDb):
     """
-    Class to help manage database insertions of QChem drones
+    Class to help manage database insertions of CREST drones
     """
 
     def __init__(self,
                  host="localhost",
                  port=27017,
-                 database="qchem",
+                 database="CREST",
                  collection="tasks",
                  user=None,
                  password=None):
-        super(QChemCalcDb, self).__init__(host, port, database, collection,
+        super(CRESTCalcDb, self).__init__(host, port, database, collection,
                                           user, password)
 
     def build_indexes(self, indexes=None, background=True):

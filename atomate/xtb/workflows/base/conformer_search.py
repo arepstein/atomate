@@ -4,7 +4,7 @@ from __future__ import absolute_import, division, print_function, \
     unicode_literals
 
 from fireworks import Workflow
-from atomate.xtb.fireworks.core import conformersFW
+from atomate.xtb.fireworks.core import ConformersFW
 from atomate.utils.utils import get_logger
 
 __author__ = "Alex Epstein"
@@ -20,10 +20,10 @@ logger = get_logger(__name__)
 
 
 def get_wf_simpleConformerSearch(molecule,
-                         name="simple_conf_search",
-                         crest_cmd=">>crest_cmd<<",
-                         db_file=">>db_file<<",
-                         **kwargs):
+                                 name="simple_conf_search",
+                                 crest_cmd=">>crest_cmd<<",
+                                 db_file=">>db_file<<",
+                                 **kwargs):
     """
     Returns a workflow to the torsion potential for a molecule.
 
@@ -40,9 +40,9 @@ def get_wf_simpleConformerSearch(molecule,
         Workflow
     """
 
-    fw1 = conformersFW(
+    fw1 = ConformersFW(
         molecule=molecule,
-        name="simple_conformer_search",
+        name="superquick_conformer_search",
         crest_cmd=crest_cmd,
         db_file=db_file,
         crest_flags="-squick"

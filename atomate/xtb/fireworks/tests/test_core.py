@@ -8,7 +8,7 @@ import unittest
 from atomate.xtb.firetasks.write_inputs import WriteBasicInput
 from atomate.xtb.firetasks.run_calc import RunCRESTDirect
 from atomate.xtb.firetasks.parse_outputs import CRESTToDb
-from atomate.xtb.fireworks.core import conformersFW
+from atomate.xtb.fireworks.core import ConformersFW
 from atomate.utils.testing import AtomateTest
 from pymatgen.io.xtb.outputs import CRESTOutput
 
@@ -37,7 +37,7 @@ class TestCore(AtomateTest):
         pass
 
     def test_conformersFW(self):
-        firework = conformersFW(molecule=self.act_mol)
+        firework = ConformersFW(molecule=self.act_mol)
         self.assertEqual(firework.tasks[0].as_dict(),
                          WriteBasicInput(
                              molecule=self.act_mol,

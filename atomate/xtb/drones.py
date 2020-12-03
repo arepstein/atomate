@@ -12,6 +12,7 @@ from monty.json import jsanitize
 from pymatgen.io.xtb.outputs import CRESTOutput
 from pymatgen.core.structure import Molecule
 from pymatgen.apps.borg.hive import AbstractDrone
+from pymatgen.io.babel import BabelMolAdaptor
 
 from atomate.utils.utils import get_logger
 from atomate import __version__ as atomate_version
@@ -36,11 +37,10 @@ class CRESTDrone(AbstractDrone):
     __version__ = atomate_version  # note: the version is inserted into the task doc
 
     # Schema def of important keys and sub-keys; used in validation
-    # I haven't worried about this yet
     schema = {
         "root": {
             "dir_name", "input", "output", "formula_pretty", "formula_anonymous",
-            "properly_terminated"
+            "smiles", "properly_terminated"
         },
         "input": {"initial_molecule", "cmd_options"},
         "output": {"lowest_energy_structure", "sorted_structures_energies"}
@@ -67,17 +67,18 @@ class CRESTDrone(AbstractDrone):
             path (str): Path to the directory containing output file
             input_file (str): base name of the input file(s)
             output_file (str): base name of the output file(s)
-            multirun (bool): Whether the job to parse includes multiple
-                            calculations in one i/o pair. Likely unused here.
-
+            multirun (bool): Likely unused for CREST. Whether the job to parse includes multiple
+                            calculations in one i/o pair.
         Returns:
             d (dict): a task dictionary
         """
         logger.info("Getting task doc for base dir :{}".format(path))
+
+        # Filtering most likely unnecessary for CREST
         crestinput_files = self.filter_files(path, file_pattern=input_file)
         crestoutput_files = self.filter_files(path, file_pattern=output_file)
         if len(crestinput_files) != len(crestoutput_files):
-            raise AssertionError("Inequal number of input and output files!")
+            raise AssertionError("Unequal number of input and output files!")
         if len(crestinput_files) > 0 and len(crestoutput_files) > 0:
             d = self.generate_doc(path, crestinput_files, crestoutput_files,
                                   multirun)
@@ -122,7 +123,7 @@ class CRESTDrone(AbstractDrone):
         return processed_files
 
     def generate_doc(self, dir_name, crestinput_files, crestoutput_files, multirun):
-        #Deleted a lot of this because assuming only one run
+        # Assumes multirun is false
         try:
             fullpath = os.path.abspath(dir_name)
             d = jsanitize(self.additional_fields, strict=True)
@@ -152,11 +153,16 @@ class CRESTDrone(AbstractDrone):
                 "sorted_structures_energies": d_calc_final["output"]["sorted_structures_energies"]
             }
 
-            d["state"] = "successful" if d_calc_final["properly_terminated"] else "unsuccessful"
-
             comp = d["output"]["initial_molecule"].composition
             d["formula_pretty"] = comp.reduced_formula
             d["formula_anonymous"] = comp.anonymized_formula
+            bb = BabelMolAdaptor(d["output"]["initial_molecule"])
+            pbmol = bb.pybel_mol
+            smiles = pbmol.write(str("smi")).split()[0]
+            d["smiles"] = smiles
+
+            d["state"] = "successful" if d_calc_final["properly_terminated"] else "unsuccessful"
+
             return d
 
         except Exception:

@@ -23,7 +23,7 @@ __date__ = "5/23/18"
 __credits__ = "Brandon Wood, Shyam Dwaraknath"
 
 
-class conformersFW(Firework):
+class ConformersFW(Firework):
     def __init__(self,
                  molecule=None,
                  name="conformer search",
@@ -71,10 +71,8 @@ class conformersFW(Firework):
                 input_file=input_file,
                 output_file=output_file,
                 additional_fields={"task_label": name}))
-        super(conformersFW, self).__init__(
+        super(ConformersFW, self).__init__(
             t,
             parents=parents,
             name=name,
             **kwargs)
-
-

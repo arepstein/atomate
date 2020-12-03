@@ -39,7 +39,6 @@ class TestRunCalcCREST(AtomateTest):
             self.assertEqual(subprocess_patch.call_args[0][0],
                              "crest crest_in.xyz -mquick> crest_out.out")
 
-
     # def test_RunQChemCustodian_using_fw_spec_defaults(self):
     #     with patch("atomate.qchem.firetasks.run_calc.Custodian"
     #                ) as custodian_patch:
@@ -75,6 +74,7 @@ class TestRunCalcCREST(AtomateTest):
     #             "max_errors": 5,
     #             "gzipped_output": True
     #         })
+
 
 if __name__ == "__main__":
     unittest.main()

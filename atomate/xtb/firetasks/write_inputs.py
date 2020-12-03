@@ -25,14 +25,14 @@ class WriteBasicInput(FiretaskBase):
     """
     CREST only requires one structure file as input.
         """
-    #TODO: implement constraints
+    # TODO: implement constraints
 
     # molecule not required because can be inherited from prev_calc_molecule
     required_params = []
     optional_params = ["molecule", "constraints"]
 
     def run_task(self, fw_spec):
-        input_file = os.path.join(self.get("write_to_dir", ""),self.get("input_file", "crest_in.xyz"))
+        input_file = os.path.join(self.get("write_to_dir", ""), self.get("input_file", "crest_in.xyz"))
         # these if statements might need to be reordered at some point
         if "molecule" in self:
             molecule = self["molecule"]
@@ -43,5 +43,3 @@ class WriteBasicInput(FiretaskBase):
                 "No molecule present, add as an optional param or check fw_spec"
             )
         molecule.to(fmt='xyz', filename=input_file)
-
-

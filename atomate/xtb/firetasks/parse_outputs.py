@@ -9,19 +9,19 @@ from fireworks import FiretaskBase, FWAction, explicit_serialize
 from fireworks.utilities.fw_serializers import DATETIME_HANDLER
 
 from atomate.common.firetasks.glue_tasks import get_calc_loc
-from atomate.qchem.database import QChemCalcDb
+from atomate.xtb.database import CRESTCalcDb
 from atomate.utils.utils import env_chk
 from atomate.utils.utils import get_logger
 from atomate.xtb.drones import CRESTDrone
 
-__author__ = "Samuel Blau"
+__author__ = "Alex Epstein"
 __copyright__ = "Copyright 2018, The Materials Project"
 __version__ = "0.1"
-__maintainer__ = "Samuel Blau"
-__email__ = "samblau1@gmail.com"
+__maintainer__ = "Alex Epstein"
+__email__ = "aepstein@lbl.gov"
 __status__ = "Alpha"
 __date__ = "4/25/18"
-__credits__ = "Brandon Wood, Shyam Dwaraknath, Xiaohui Qu"
+__credits__ = "Sam Blau"
 
 logger = get_logger(__name__)
 
@@ -91,7 +91,7 @@ class CRESTToDb(FiretaskBase):
             with open(os.path.join(calc_dir, "task.json"), "w") as f:
                 f.write(json.dumps(task_doc, default=DATETIME_HANDLER))
         else:
-            mmdb = QChemCalcDb.from_db_file(db_file, admin=True)
+            mmdb = CRESTCalcDb.from_db_file(db_file, admin=True)
             t_id = mmdb.insert(task_doc)
             logger.info("Finished parsing with task_id: {}".format(t_id))
 
@@ -105,9 +105,7 @@ class CRESTToDb(FiretaskBase):
                 pass
             elif defuse_unsuccessful == "fizzle":
                 raise RuntimeError(
-                    "QChemToDb indicates that job is not successful "
-                    "(perhaps your job did not converge within the "
-                    "limit of electronic iterations)!")
+                    "CRESTToDb indicates that job is not successful.")
             else:
                 raise RuntimeError("Unknown option for defuse_unsuccessful: "
                                    "{}".format(defuse_unsuccessful))
