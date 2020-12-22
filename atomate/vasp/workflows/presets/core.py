@@ -1,6 +1,5 @@
 # coding: utf-8
 
-from __future__ import division, print_function, unicode_literals, absolute_import
 
 from uuid import uuid4
 
@@ -52,6 +51,29 @@ def wf_bandstructure(structure, c=None):
         wf = add_wf_metadata(wf, structure)
 
     return wf
+
+
+def wf_bandstructure_no_opt(structure, c=None):
+
+    c = c or {}
+    vasp_cmd = c.get("VASP_CMD", VASP_CMD)
+    db_file = c.get("DB_FILE", DB_FILE)
+
+    wf = get_wf(structure, "bandstructure_no_opt.yaml",
+                vis=MPStaticSet(structure, force_gamma=True),
+                common_params={"vasp_cmd": vasp_cmd, "db_file": db_file})
+
+    wf = add_common_powerups(wf, c)
+
+    if c.get("SMALLGAP_KPOINT_MULTIPLY", SMALLGAP_KPOINT_MULTIPLY):
+        wf = add_small_gap_multiply(wf, 0.5, 5, "static")
+        wf = add_small_gap_multiply(wf, 0.5, 5, "nscf")
+
+    if c.get("ADD_WF_METADATA", ADD_WF_METADATA):
+        wf = add_wf_metadata(wf, structure)
+
+    return wf
+
 
 def wf_bandstructure_hse(structure, c=None):
 
@@ -212,6 +234,22 @@ def wf_piezoelectric_constant(structure, c=None):
     db_file = c.get("DB_FILE", DB_FILE)
 
     wf = get_wf(structure, "piezoelectric_constant.yaml",
+                common_params={"vasp_cmd": vasp_cmd, "db_file": db_file})
+
+    wf = add_common_powerups(wf, c)
+
+    if c.get("ADD_WF_METADATA", ADD_WF_METADATA):
+        wf = add_wf_metadata(wf, structure)
+
+    return wf
+
+def wf_nmr(structure, c=None):
+
+    c = c or {}
+    vasp_cmd = c.get("VASP_CMD", VASP_CMD)
+    db_file = c.get("DB_FILE", DB_FILE)
+
+    wf = get_wf(structure, "nmr.yaml",
                 common_params={"vasp_cmd": vasp_cmd, "db_file": db_file})
 
     wf = add_common_powerups(wf, c)
@@ -452,7 +490,7 @@ def wf_bulk_modulus(structure, c=None):
     # get the deformations wflow for bulk modulus calculation
     wf_bm = get_wf_bulk_modulus(structure, eos=eos, user_kpoints_settings=user_kpoints_settings,
                                 deformations=deformations, vasp_cmd=vasp_cmd, db_file=db_file, tag=tag,
-                                vasp_input_set=vis_static)
+                                copy_vasp_outputs=True, vasp_input_set=vis_static)
 
     # chain it
     wf.append_wf(wf_bm, wf.leaf_fw_ids)
@@ -504,6 +542,7 @@ def wf_thermal_expansion(structure, c=None):
 
     wf_thermal = get_wf_thermal_expansion(structure, user_kpoints_settings=user_kpoints_settings,
                                           deformations=deformations, vasp_cmd=vasp_cmd, db_file=db_file,
+                                          copy_vasp_outputs=True,
                                           eos=eos, pressure=pressure, tag=tag)
 
     # chain it

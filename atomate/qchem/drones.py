@@ -1,6 +1,5 @@
 # coding: utf-8
 
-from __future__ import division, print_function, unicode_literals, absolute_import
 
 import os
 import datetime
@@ -10,10 +9,12 @@ import json
 import glob
 import traceback
 from itertools import chain
+import copy
 
 from monty.io import zopen
 from monty.json import jsanitize
-from pymatgen.io.qchem.outputs import QCOutput
+from pymatgen.core import Molecule
+from pymatgen.io.qchem.outputs import QCOutput, check_for_structure_changes
 from pymatgen.io.qchem.inputs import QCInput
 from pymatgen.apps.borg.hive import AbstractDrone
 from pymatgen.io.babel import BabelMolAdaptor
@@ -46,10 +47,10 @@ class QChemDrone(AbstractDrone):
         "root": {
             "dir_name", "input", "output", "calcs_reversed", "smiles",
             "walltime", "cputime", "formula_pretty", "formula_anonymous",
-            "chemsys", "pointgroup"
+            "chemsys", "pointgroup", "formula_alphabetical"
         },
         "input": {"initial_molecule", "job_type"},
-        "output": {"initial_molecule", "job_type"}
+        "output": {"initial_molecule", "job_type", "final_energy"}
     }
 
     def __init__(self, runs=None, additional_fields=None):
@@ -61,7 +62,8 @@ class QChemDrone(AbstractDrone):
         """
         self.runs = runs or list(
             chain.from_iterable([["opt_" + str(ii), "freq_" + str(ii)]
-                                 for ii in range(9)]))
+                                 for ii in range(10)]))
+        self.runs = ["orig"] + self.runs
         self.additional_fields = additional_fields or {}
 
     def assimilate(self, path, input_file, output_file, multirun):
@@ -82,7 +84,11 @@ class QChemDrone(AbstractDrone):
         qcinput_files = self.filter_files(path, file_pattern=input_file)
         qcoutput_files = self.filter_files(path, file_pattern=output_file)
         if len(qcinput_files) != len(qcoutput_files):
-            raise AssertionError("Inequal number of input and output files!")
+            if len(qcinput_files) > len(qcoutput_files):
+                if list(qcinput_files.items())[0][0] != "orig":
+                    raise AssertionError("Can only have inequal number of input and output files when there is a saved copy of the original input!")
+            else:
+                raise AssertionError("Inequal number of input and output files!")
         if len(qcinput_files) > 0 and len(qcoutput_files) > 0:
             d = self.generate_doc(path, qcinput_files, qcoutput_files,
                                   multirun)
@@ -119,7 +125,7 @@ class QChemDrone(AbstractDrone):
                 for f in files:
                     if fnmatch(f, "{}.{}*".format(file_pattern, r)):
                         processed_files[r] = f
-        if len(processed_files) == 0:
+        if len(processed_files) == 0 or (len(processed_files)==1 and "orig" in processed_files):
             # get any matching file from the folder
             for f in files:
                 if fnmatch(f, "{}*".format(file_pattern)):
@@ -135,6 +141,20 @@ class QChemDrone(AbstractDrone):
                 "version": QChemDrone.__version__
             }
             d["dir_name"] = fullpath
+
+            # If a saved "orig" input file is present, parse it incase the error handler made changes
+            # to the initial input molecule or rem params, which we might want to filter for later
+            if len(qcinput_files) > len(qcoutput_files):
+                orig_input = QCInput.from_file(os.path.join(dir_name, qcinput_files.pop("orig")))
+                d["orig"] = {}
+                d["orig"]["molecule"] = orig_input.molecule.as_dict()
+                d["orig"]["molecule"]["charge"] = int(d["orig"]["molecule"]["charge"])
+                d["orig"]["rem"] = orig_input.rem
+                d["orig"]["opt"] = orig_input.opt
+                d["orig"]["pcm"] = orig_input.pcm
+                d["orig"]["solvent"] = orig_input.solvent
+                d["orig"]["smx"] = orig_input.smx
+
             if multirun:
                 d["calcs_reversed"] = self.process_qchem_multirun(
                     dir_name, qcinput_files, qcoutput_files)
@@ -149,6 +169,18 @@ class QChemDrone(AbstractDrone):
             # reverse the calculations data order so newest calc is first
             d["calcs_reversed"].reverse()
 
+            d["structure_change"] = []
+            d["warnings"] = {}
+            for entry in d["calcs_reversed"]:
+                if "structure_change" in entry and "structure_change" not in d["warnings"]:
+                    if entry["structure_change"] != "no_change":
+                        d["warnings"]["structure_change"] = True
+                if "structure_change" in entry:
+                    d["structure_change"].append(entry["structure_change"])
+                for key in entry["warnings"]:
+                    if key not in d["warnings"]:
+                        d["warnings"][key] = True
+
             d_calc_init = d["calcs_reversed"][-1]
             d_calc_final = d["calcs_reversed"][0]
 
@@ -158,13 +190,21 @@ class QChemDrone(AbstractDrone):
             }
             d["output"] = {
                 "initial_molecule": d_calc_final["initial_molecule"],
-                "job_type": d_calc_final["input"]["rem"]["job_type"]
+                "job_type": d_calc_final["input"]["rem"]["job_type"],
+                "mulliken": d_calc_final["Mulliken"][-1]
             }
+            if "RESP" in d_calc_final:
+                d["output"]["resp"] = d_calc_final["RESP"][-1]
+            elif "ESP" in d_calc_final:
+                d["output"]["esp"] = d_calc_final["ESP"][-1]
 
             if d["output"]["job_type"] == "opt" or d["output"]["job_type"] == "optimization":
-                d["output"]["optimized_molecule"] = d_calc_final[
-                    "molecule_from_optimized_geometry"]
-                d["output"]["final_energy"] = d_calc_final["final_energy"]
+                if "molecule_from_optimized_geometry" in d_calc_final:
+                    d["output"]["optimized_molecule"] = d_calc_final[
+                        "molecule_from_optimized_geometry"]
+                    d["output"]["final_energy"] = d_calc_final["final_energy"]
+                else:
+                    d["output"]["final_energy"] = "unstable"
                 if d_calc_final["opt_constraint"]:
                     d["output"]["constraint"] = [
                         d_calc_final["opt_constraint"][0],
@@ -172,52 +212,90 @@ class QChemDrone(AbstractDrone):
                     ]
             if d["output"]["job_type"] == "freq" or d["output"]["job_type"] == "frequency":
                 d["output"]["frequencies"] = d_calc_final["frequencies"]
-                d["output"]["enthalpy"] = d_calc_final["enthalpy"]
-                d["output"]["entropy"] = d_calc_final["entropy"]
+                d["output"]["enthalpy"] = d_calc_final["total_enthalpy"]
+                d["output"]["entropy"] = d_calc_final["total_entropy"]
                 if d["input"]["job_type"] == "opt" or d["input"]["job_type"] == "optimization":
                     d["output"]["optimized_molecule"] = d_calc_final[
                         "initial_molecule"]
                     d["output"]["final_energy"] = d["calcs_reversed"][1][
                         "final_energy"]
 
-            if "special_run_type" in d:
-                if d["special_run_type"] == "frequency_flattener":
-                    d["num_frequencies_flattened"] = (
-                        len(qcinput_files) / 2) - 1
+            opt_trajectory = []
+            calcs = copy.deepcopy(d["calcs_reversed"])
+            calcs.reverse()
+            for calc in calcs:
+                job_type = calc["input"]["rem"]["job_type"]
+                if job_type == "opt" or job_type == "optimization":
+                    for ii,geom in enumerate(calc["geometries"]):
+                        site_properties = {"Mulliken":calc["Mulliken"][ii]}
+                        if "RESP" in calc:
+                            site_properties["RESP"] = calc["RESP"][ii]
+                        mol = Molecule(
+                            species=calc["species"],
+                            coords=geom,
+                            charge=calc["charge"],
+                            spin_multiplicity=calc["multiplicity"],
+                            site_properties=site_properties)
+                        traj_entry = {"molecule":mol}
+                        traj_entry["energy"] = calc["energy_trajectory"][ii]
+                        opt_trajectory.append(traj_entry)
+            if opt_trajectory != []:
+                d["opt_trajectory"] = opt_trajectory
 
-            total_cputime = 0.0
-            total_walltime = 0.0
-            nan_found = False
-            for calc in d["calcs_reversed"]:
-                if calc["walltime"] != "nan":
-                    total_walltime += calc["walltime"]
+            if "final_energy" not in d["output"]:
+                if d_calc_final["final_energy"] != None:
+                    d["output"]["final_energy"] = d_calc_final["final_energy"]
                 else:
-                    nan_found = True
-                if calc["cputime"] != "nan":
-                    total_cputime += calc["cputime"]
-                else:
-                    nan_found = True
-            if nan_found:
-                d["walltime"] = "nan"
-                d["cputime"] = "nan"
-            else:
+                    d["output"]["final_energy"] = d_calc_final["SCF"][-1][-1][0]
+
+            if d_calc_final["completion"]:
+                total_cputime = 0.0
+                total_walltime = 0.0
+                for calc in d["calcs_reversed"]:
+                    if calc["walltime"] is not None:
+                        total_walltime += calc["walltime"]
+                    if calc["cputime"] is not None:
+                        total_cputime += calc["cputime"]
                 d["walltime"] = total_walltime
                 d["cputime"] = total_cputime
+            else:
+                d["walltime"] = None
+                d["cputime"] = None
 
             comp = d["output"]["initial_molecule"].composition
             d["formula_pretty"] = comp.reduced_formula
             d["formula_anonymous"] = comp.anonymized_formula
+            d["formula_alphabetical"] = comp.alphabetical_formula
             d["chemsys"] = "-".join(sorted(set(d_calc_final["species"])))
-            d["pointgroup"] = PointGroupAnalyzer(
-                d["output"]["initial_molecule"]).sch_symbol
+            if d_calc_final["point_group"] != None:
+                d["pointgroup"] = d_calc_final["point_group"]
+            else:
+                try:
+                    d["pointgroup"] = PointGroupAnalyzer(d["output"]["initial_molecule"]).sch_symbol
+                except ValueError:
+                    d["pointgroup"] = "PGA_error"
 
             bb = BabelMolAdaptor(d["output"]["initial_molecule"])
             pbmol = bb.pybel_mol
             smiles = pbmol.write(str("smi")).split()[0]
             d["smiles"] = smiles
 
-            d["state"] = "successful" if d_calc_final[
-                "completion"] else "unsuccessful"
+            d["state"] = "successful" if d_calc_final["completion"] else "unsuccessful"
+            if "special_run_type" in d:
+                if d["special_run_type"] == "frequency_flattener":
+                    if d["state"] == "successful":
+                        orig_num_neg_freq = sum(1 for freq in d["calcs_reversed"][-2]["frequencies"] if freq < 0)
+                        orig_energy = d_calc_init["final_energy"]
+                        final_num_neg_freq = sum(1 for freq in d_calc_final["frequencies"] if freq < 0)
+                        final_energy = d["calcs_reversed"][1]["final_energy"]
+                        d["num_frequencies_flattened"] = orig_num_neg_freq - final_num_neg_freq
+                        if final_num_neg_freq > 0: # If a negative frequency remains,
+                            # and it's too large to ignore,
+                            if final_num_neg_freq > 1 or abs(d["output"]["frequencies"][0]) >= 15.0:
+                                d["state"] = "unsuccessful" # then the flattening was unsuccessful
+                        if final_energy > orig_energy:
+                            d["warnings"]["energy_increased"] = True
+
             d["last_updated"] = datetime.datetime.utcnow()
             return d
 
@@ -242,6 +320,7 @@ class QChemDrone(AbstractDrone):
         d["input"]["opt"] = temp_input.opt
         d["input"]["pcm"] = temp_input.pcm
         d["input"]["solvent"] = temp_input.solvent
+        d["input"]["smx"] = temp_input.smx
         d["task"] = {"type": taskname, "name": taskname}
         return d
 
@@ -272,6 +351,7 @@ class QChemDrone(AbstractDrone):
                     d["input"]["opt"] = multi_in[ii].opt
                     d["input"]["pcm"] = multi_in[ii].pcm
                     d["input"]["solvent"] = multi_in[ii].solvent
+                    d["input"]["smx"] = multi_in[ii].smx
                     d["task"] = {"type": key, "name": "calc" + str(ii)}
                     to_return.append(d)
             return to_return
@@ -280,7 +360,6 @@ class QChemDrone(AbstractDrone):
     def post_process(dir_name, d):
         """
         Post-processing for various files other than the QChem input and output files.
-        Currently only looks for custodian.json. Modify this if other files need to be processed.
         """
         logger.info("Post-processing dir:{}".format(dir_name))
         fullpath = os.path.abspath(dir_name)
@@ -288,6 +367,10 @@ class QChemDrone(AbstractDrone):
         if len(filenames) >= 1:
             with zopen(filenames[0], "rt") as f:
                 d["custodian"] = json.load(f)
+        filenames = glob.glob(os.path.join(fullpath, "solvent_data*"))
+        if len(filenames) >= 1:
+            with zopen(filenames[0], "rt") as f:
+                d["custom_smd"] = f.readlines()[0]
 
     def validate_doc(self, d):
         """
@@ -297,7 +380,7 @@ class QChemDrone(AbstractDrone):
         for k, v in self.schema.items():
             diff = v.difference(set(d.get(k, d).keys()))
             if diff:
-                logger.warn("The keys {0} in {1} not set".format(diff, k))
+                logger.warning("The keys {0} in {1} not set".format(diff, k))
 
     @staticmethod
     def get_valid_paths(self, path):

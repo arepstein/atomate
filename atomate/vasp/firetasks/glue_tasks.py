@@ -1,12 +1,10 @@
 # coding: utf-8
 
-from __future__ import division, print_function, unicode_literals, \
-    absolute_import
-
 import glob
+import warnings
 
-from pymatgen.analysis.elasticity.strain import Strain
-from pymatgen.io.vasp import Vasprun, zpath
+from pymatgen.io.vasp import Vasprun
+from monty.os.path import zpath
 
 """
 This module defines tasks that acts as a glue between other vasp Firetasks to allow communication
@@ -14,6 +12,7 @@ between different Firetasks and Fireworks. This module also contains tasks that 
 flow of the workflow, e.g. tasks to check stability or the gap is within a certain range.
 """
 
+import shutil
 import gzip
 import os
 import re
@@ -38,9 +37,9 @@ __email__ = 'ajain@lbl.gov, kmathew@lbl.gov'
 class CopyVaspOutputs(CopyFiles):
     """
     Copy files from a previous VASP run directory to the current directory.
-    By default, copies 'INCAR', 'POSCAR' (default: via 'CONTCAR'), 'KPOINTS', 
-    'POTCAR', 'OUTCAR', and 'vasprun.xml'. Additional files, e.g. 'CHGCAR', 
-    can also be specified. Automatically handles files that have a ".gz" 
+    By default, copies 'INCAR', 'POSCAR' (default: via 'CONTCAR'), 'KPOINTS',
+    'POTCAR', 'OUTCAR', and 'vasprun.xml'. Additional files, e.g. 'CHGCAR',
+    can also be specified. Automatically handles files that have a ".gz"
     extension (copies and unzips).
 
     Note that you must specify either "calc_loc" or "calc_dir" to indicate
@@ -57,12 +56,16 @@ class CopyVaspOutputs(CopyFiles):
         additional_files ([str]): additional files to copy,
             e.g. ["CHGCAR", "WAVECAR"]. Use $ALL if you just want to copy
             everything
-        contcar_to_poscar(bool): If True (default), will move CONTCAR to
+        contcar_to_poscar (bool): If True (default), will move CONTCAR to
             POSCAR (original POSCAR is not copied).
+        potcar_spec (bool): Instead of copying the POTCAR, copy the
+            "POTCAR.spec". This is intended to allow testing of workflows
+            without requiring pseudo-potentials to be installed on the system.
+            Default: False
     """
 
     optional_params = ["calc_loc", "calc_dir", "filesystem", "additional_files",
-                       "contcar_to_poscar"]
+                       "contcar_to_poscar", "potcar_spec"]
 
     def run_task(self, fw_spec):
 
@@ -72,11 +75,14 @@ class CopyVaspOutputs(CopyFiles):
 
         # determine what files need to be copied
         files_to_copy = None
-        if not "$ALL" in self.get("additional_files", []):
+        if "$ALL" not in self.get("additional_files", []):
             files_to_copy = ['INCAR', 'POSCAR', 'KPOINTS', 'POTCAR', 'OUTCAR',
                              'vasprun.xml']
             if self.get("additional_files"):
                 files_to_copy.extend(self["additional_files"])
+            if self.get("potcar_spec", False):
+                files_to_copy.remove("POTCAR")
+                files_to_copy.append("POTCAR.spec")
 
         # decide between poscar and contcar
         contcar_to_poscar = self.get("contcar_to_poscar", True)
@@ -119,7 +125,13 @@ class CopyVaspOutputs(CopyFiles):
                         gz_ext = possible_ext
 
             if not (f + relax_ext + gz_ext) in all_files:
-                raise ValueError("Cannot find file: {}".format(f))
+                # do not fail if KPOINTS is missing, because this might indicate use of automatic
+                # KPOINTS (e.g., KSPACING argument)
+                if f == 'KPOINTS':
+                    warnings.warn("Cannot find file: {}".format(f))
+                    continue
+                else:
+                    raise ValueError("Cannot find file: {}".format(f))
 
             # copy the file (minus the relaxation extension)
             self.fileclient.copy(prev_path_full + relax_ext + gz_ext,
@@ -128,11 +140,8 @@ class CopyVaspOutputs(CopyFiles):
             # unzip the .gz if needed
             if gz_ext in ['.gz', ".GZ"]:
                 # unzip dest file
-                f = gzip.open(dest_path + gz_ext, 'rt')
-                file_content = f.read()
-                with open(dest_path, 'w') as f_out:
-                    f_out.writelines(file_content)
-                f.close()
+                with open(dest_path, 'wb') as f_out, gzip.open(dest_path + gz_ext, 'rb') as f_in:
+                    shutil.copyfileobj(f_in, f_out)
                 os.remove(dest_path + gz_ext)
 
 
@@ -206,7 +215,7 @@ class CheckBandgap(FiretaskBase):
                 vr_path = relax_paths[-1]
 
         logger.info("Checking the gap of file: {}".format(vr_path))
-        vr = Vasprun(vr_path)
+        vr = Vasprun(vr_path, parse_potcar_file=False)
         gap = vr.get_band_structure().get_band_gap()["energy"]
         stored_data = {"band_gap": gap}
         logger.info(
@@ -260,16 +269,15 @@ class GetInterpolatedPOSCAR(FiretaskBase):
         if not os.path.exists(os.path.join(os.getcwd(), interpolate_folder)):
             os.makedirs(os.path.join(os.getcwd(), interpolate_folder))
 
-        # use method of GrabFilesFromCalcLoc to grab files from previous locations.
-        CopyFilesFromCalcLoc(calc_dir=None, calc_loc=self["start"],
+        # use CopyFilesFromCalcLoc to get files from previous locations.
+        CopyFilesFromCalcLoc(calc_loc=self["start"],
                              filenames=["CONTCAR"],
                              name_prepend=interpolate_folder + os.sep,
                              name_append="_0").run_task(fw_spec=fw_spec)
-        CopyFilesFromCalcLoc(calc_dir=None, calc_loc=self["end"],
+        CopyFilesFromCalcLoc(calc_loc=self["end"],
                              filenames=["CONTCAR"],
                              name_prepend=interpolate_folder + os.sep,
                              name_append="_1").run_task(fw_spec=fw_spec)
-
 
         # assuming first calc_dir is polar structure for ferroelectric search
         s1 = Structure.from_file(os.path.join(interpolate_folder, "CONTCAR_0"))
@@ -291,7 +299,7 @@ def pass_vasp_result(pass_dict=None, calc_dir='.', filename="vasprun.xml.gz",
     Function that gets a PassResult firework corresponding to output from a Vasprun.  Covers
     most use cases in which user needs to pass results from a vasp run to child FWs
     (e. g. analysis FWs)
-        
+
     pass_vasp_result(pass_dict={'stress': ">>ionic_steps.-1.stress"})
 
     Args:
@@ -315,7 +323,7 @@ def pass_vasp_result(pass_dict=None, calc_dir='.', filename="vasprun.xml.gz",
             defaults to false
         **kwargs (keyword args): other keyword arguments passed to PassResult
             e.g. mod_spec_key or mod_spec_cmd
-        
+
     """
     pass_dict = pass_dict or {"computed_entry": "a>>get_computed_entry"}
     parse_kwargs = {"filename": filename, "parse_eigen": parse_eigen,

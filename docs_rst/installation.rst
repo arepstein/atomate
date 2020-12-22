@@ -74,7 +74,7 @@ Note that there are various tools to query this information later, ranging from 
 
 MongoDB must be running and available to accept connections whenever you are running workflows. Thus, it is strongly recommended that you have a server to run MongoDB or (simpler) use a hosting service. Your options are:
 
-* use a commercial service to host your MongoDB instance. These are typically the easiest to use and offer high quality service but require payment for larger databases. `MongoDB Atlas <https://www.mongodb.com/cloud/atlas>`_ offers free 500 MB databases with payment required for larger databases; the free tier is certainly enough to get started for small to medium size projects, and it is easy to upgrade or migrate your database if you do exceed the free allocation.
+* use a commercial service to host your MongoDB instance. These are typically the easiest to use and offer high quality service but require payment for larger databases. `mLab <http://mlab.com/>`_ and `MongoDB Atlas <https://www.mongodb.com/cloud/atlas>`_ offer free 500 MB databases with payment required for larger databases; the free tier is certainly enough to get started for small to medium size projects, and it is easy to upgrade or migrate your database if you do exceed the free allocation.
 * contact your supercomputing center to see if they offer MongoDB hosting (e.g., NERSC has this, Google "request NERSC MongoDB database")
 * self-host a MongoDB server
 
@@ -127,7 +127,7 @@ Installing atomate includes installation of codes, configuration files, and vari
 Create a Python 3 virtual environment
 =====================================
 
-.. note:: Make sure to create Python 3 environment (ideally Python 3.6 and higher) as recent versions of atomate only support Py3 and higher.
+.. note:: Make sure to create Python 3.6+ environment as recent versions of atomate only support Python 3.6 and higher.
 
 We highly recommended that you organize your installation of the atomate and the other Python codes using a virtual environment (e.g. ``virtualenv`` or similar tool such as anaconda).
 Ultimately, whether you want to use a virtual environment is optional and you don't have to use one if you know what you are doing.
@@ -226,6 +226,18 @@ The ``db.json`` file tells atomate the location and credentials of the MongoDB s
         "aliases": {}
     }
 
+If you want to test whether your ``db.json`` is set up correctly (**and you do not mind resetting your database!!**)), try running the Python script below in the directory with your ``db.json`` file:
+
+.. code-block:: python
+
+    from atomate.vasp.database import VaspCalcDb
+    x = VaspCalcDb.from_db_file("db.json")
+    x.reset()
+    print("SUCCESS")
+
+If you would like to store data beyond the 16 Mb limit of MongoDB please read:
+:ref:`advanced_storage`.
+
 my_fworker.yaml
 ---------------
 
@@ -281,6 +293,10 @@ Here's what you'll need to fill out:
 You can optionally set ``logdir`` to your ``<<INSTALL_DIR>>/logs`` directory, although you shouldn't need them. The ``strm_lvl`` sets the verbosity of the log and ``user_indices`` and ``wf_user_indices`` can be used to speed up targeted database queries if your project grows very large and queries are slow.
 
 **Note**: If you prefer to use the same database for FireWorks and calculation outputs, these values will largely be duplicated with ``db.json`` (this is what our tutorial is assuming). If you prefer to use different databases for workflows and calculation outputs, the information here will be different than ``db.json``.
+
+If you want to test whether your ``my_launchpad.yaml`` is set up correctly (**and you do not mind resetting your database!!**)), try executing the following command in the command line::
+
+    lpad -l my_launchpad.yaml reset
 
 my_qadapter.yaml
 ----------------
@@ -609,5 +625,5 @@ The non-reservation mode for qlaunching requires a little less maintenance with 
 Q: I honestly tried everything I can to solve my problem. I still need help!
 ----------------------------------------------------------------------------
 
-:A: There is a Google group for atomate: https://groups.google.com/forum/#!forum/atomate
+:A: There is a support forum for atomate: https://discuss.matsci.org/c/atomate
 

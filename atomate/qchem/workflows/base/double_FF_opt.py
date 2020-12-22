@@ -1,8 +1,5 @@
 # coding: utf-8
 
-from __future__ import absolute_import, division, print_function, \
-    unicode_literals
-
 # This module defines a workflow for optimizing a molecule first in vacuum and then
 # in PCM. Both optimizations will include automatic frequency flattening.
 
@@ -24,14 +21,12 @@ logger = get_logger(__name__)
 
 def get_wf_double_FF_opt(molecule,
                          pcm_dielectric,
-                         max_cores=32,
+                         linked=False,
                          qchem_input_params=None,
                          name="douple_FF_opt",
-                         qchem_cmd=">>qchem_cmd<<",
                          db_file=">>db_file<<",
                          **kwargs):
     """
-    Returns a workflow to the torsion potential for a molecule.
 
     Firework 1 : write QChem input for an FF optimization,
                  run FF_opt QCJob,
@@ -49,8 +44,24 @@ def get_wf_double_FF_opt(molecule,
         pcm_dielectric (float): The PCM dielectric constant.
         max_cores (int): Maximum number of cores to parallelize over.
             Defaults to 32.
-        qchem_input_params (dict): Specify kwargs for instantiating
-            the input set parameters.
+        qchem_input_params (dict): Specify kwargs for instantiating the input set parameters.
+                                   Basic uses would be to modify the default inputs of the set,
+                                   such as dft_rung, basis_set, pcm_dielectric, scf_algorithm,
+                                   or max_scf_cycles. See pymatgen/io/qchem/sets.py for default
+                                   values of all input parameters. For instance, if a user wanted
+                                   to use a more advanced DFT functional, include a pcm with a
+                                   dielectric of 30, and use a larger basis, the user would set
+                                   qchem_input_params = {"dft_rung": 5, "pcm_dielectric": 30,
+                                   "basis_set": "6-311++g**"}. However, more advanced customization
+                                   of the input is also possible through the overwrite_inputs key
+                                   which allows the user to directly modify the rem, pcm, smd, and
+                                   solvent dictionaries that QChemDictSet passes to inputs.py to
+                                   print an actual input file. For instance, if a user wanted to
+                                   set the sym_ignore flag in the rem section of the input file
+                                   to true, then they would set qchem_input_params = {"overwrite_inputs":
+                                   "rem": {"sym_ignore": "true"}}. Of course, overwrite_inputs
+                                   could be used in conjuction with more typical modifications,
+                                   as seen in the test_double_FF_opt workflow test.
         qchem_cmd (str): Command to run QChem.
         db_file (str): path to file containing the database credentials.
         kwargs (keyword arguments): additional kwargs to be passed to Workflow
@@ -65,9 +76,10 @@ def get_wf_double_FF_opt(molecule,
     fw1 = FrequencyFlatteningOptimizeFW(
         molecule=molecule,
         name="first_FF_no_pcm",
-        qchem_cmd=qchem_cmd,
-        max_cores=max_cores,
+        qchem_cmd=">>qchem_cmd<<",
+        max_cores=">>max_cores<<",
         qchem_input_params=first_qchem_input_params,
+        linked=linked,
         db_file=db_file)
 
     # Optimize the molecule in PCM
@@ -76,9 +88,10 @@ def get_wf_double_FF_opt(molecule,
         second_qchem_input_params[key] = first_qchem_input_params[key]
     fw2 = FrequencyFlatteningOptimizeFW(
         name="second_FF_with_pcm",
-        qchem_cmd=qchem_cmd,
-        max_cores=max_cores,
+        qchem_cmd=">>qchem_cmd<<",
+        max_cores=">>max_cores<<",
         qchem_input_params=second_qchem_input_params,
+        linked=linked,
         db_file=db_file,
         parents=fw1)
     fws = [fw1, fw2]
