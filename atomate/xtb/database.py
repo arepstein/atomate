@@ -25,9 +25,10 @@ class CRESTCalcDb(CalcDb):
                  database="CREST",
                  collection="tasks",
                  user=None,
-                 password=None):
+                 password=None,
+                 **kwargs):
         super(CRESTCalcDb, self).__init__(host, port, database, collection,
-                                          user, password)
+                                          user, password, **kwargs)
 
     def build_indexes(self, indexes=None, background=True):
         """
