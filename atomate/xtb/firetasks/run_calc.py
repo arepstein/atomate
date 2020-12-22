@@ -50,7 +50,7 @@ class RunCRESTDirect(FiretaskBase):
         input_file = self.get("input_file", "crest_in.xyz")
         output_file = self.get("output_file", "crest_out.out")
         crest_flags = self.get("crest_flags", "")
-        full_cmd = cmd + " " + input_file + " " + crest_flags + ">" + output_file
+        full_cmd = cmd + " " + input_file + " " + crest_flags + " > " + output_file
 
         logger.info("Running command: {}".format(full_cmd))
         return_code = subprocess.call(full_cmd, shell=True)
