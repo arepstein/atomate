@@ -1,6 +1,5 @@
 # coding: utf-8
 
-from __future__ import division, print_function, unicode_literals, absolute_import
 
 import os
 import unittest
@@ -41,13 +40,12 @@ class TestDoubleFFOpt(AtomateTest):
         real_wf = get_wf_double_FF_opt(
             molecule=initial_mol,
             pcm_dielectric=10.0,
-            max_cores=32,
             qchem_input_params={
                 "basis_set": "6-311++g**",
+                "scf_algorithm": "diis",
                 "overwrite_inputs": {
                     "rem": {
-                        "sym_ignore": "true",
-                        "scf_algorithm": "diis"
+                        "sym_ignore": "true"
                     }
                 }
             })
@@ -62,7 +60,7 @@ class TestDoubleFFOpt(AtomateTest):
         self.lp.add_wf(fake_wf)
         rapidfire(
             self.lp,
-            fworker=FWorker(env={"db_file": os.path.join(db_dir, "db.json")}))
+            fworker=FWorker(env={"max_cores": 32, "db_file": os.path.join(db_dir, "db.json")}))
 
         wf_test = self.lp.get_wf_by_fw_id(1)
         self.assertTrue(

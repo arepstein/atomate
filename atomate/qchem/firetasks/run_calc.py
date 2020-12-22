@@ -1,6 +1,5 @@
 # coding: utf-8
 
-from __future__ import division, print_function, unicode_literals, absolute_import
 
 # This module defines tasks that support running QChem in various ways.
 
@@ -39,16 +38,19 @@ class RunQChemDirect(FiretaskBase):
 
     Required params:
         qchem_cmd (str): The name of the full command line call to run. This should include any
-                         flags for parallelization, saving scratch, etc. Supports env_chk.
+                         flags for parallelization, saving scratch, and input / output files.
+                         Does NOT support env_chk.
     Optional params:
         scratch_dir (str): Path to the scratch directory. Defaults to "/dev/shm/qcscratch/".
+                           Supports env_chk.
+
     """
 
     required_params = ["qchem_cmd"]
     optional_params = ["scratch_dir"]
 
     def run_task(self, fw_spec):
-        cmd = env_chk(self["qchem_cmd"], fw_spec)
+        cmd = self.get("qchem_cmd")
         scratch_dir = env_chk(self.get("scratch_dir"), fw_spec)
         if scratch_dir == None:
             scratch_dir = "/dev/shm/qcscratch/"
@@ -66,62 +68,66 @@ class RunQChemCustodian(FiretaskBase):
     Run QChem using custodian "on rails", i.e. in a simple way that supports most common options.
 
     Required params:
-        qchem_cmd (str): the name of the full executable for running QChem. Note that this is
+        qchem_cmd (str): The name of the full executable for running QChem. Note that this is
                          explicitly different from qchem_cmd in RunQChemDirect because it does
                          not include any flags and should only be the call to the executable.
                          Supports env_chk.
 
     Optional params:
-        multimode (str): Parallelization scheme, either openmp or mpi.
-        input_file (str): Name of the QChem input file.
-        output_file (str): Name of the QChem output file.
-        max_cores (int): Maximum number of cores to parallelize over. Defaults to 32.
+        multimode (str): Parallelization scheme, either openmp or mpi. Defaults to openmp.
+                         Supports env_chk.
+        input_file (str): Name of the QChem input file. Defaults to "mol.qin".
+        output_file (str): Name of the QChem output file. Defaults to "mol.qout"
+        max_cores (int): Maximum number of cores to parallelize over. Supports env_chk.
         qclog_file (str): Name of the file to redirect the standard output to. None means
                           not to record the standard output. Defaults to None.
         suffix (str): String to append to the file in postprocess.
-        scratch_dir (str): QCSCRATCH directory. Defaults to "/dev/shm/qcscratch/".
+        calc_loc (str): Path where Q-Chem should run. Will env_chk by default. If not in
+                        environment, will be set to None, in which case Q-Chem will run in
+                        the system-defined QCLOCALSCR.
         save_scratch (bool): Whether to save scratch directory contents. Defaults to False.
-        save_name (str): Name of the saved scratch directory. Defaults to "default_save_name".
         max_errors (int): Maximum # of errors to fix before giving up (default=5)
         job_type (str): Choose from "normal" (default) and "opt_with_frequency_flattener"
         handler_group (str): Group of handlers to use. See handler_groups dict in the code
                              for the groups and complete list of handlers in each group.
-        gzip_output (bool): gzip output (default=T)
+        gzip_output (bool): gzip output, defaults to True.
+        backup (bool): Whether to backup the initial input file. If True, the input will
+                       be copied with a ".orig" appended. Defaults to True.
 
         *** Just for opt_with_frequency_flattener ***
+        linked (bool): Whether or not to use the linked flattener. Defaults to True.
         max_iterations (int): Number of perturbation -> optimization -> frequency iterations
                               to perform. Defaults to 10.
         max_molecule_perturb_scale (float): The maximum scaled perturbation that can be
                                             applied to the molecule. Defaults to 0.3.
-        reversed_direction (bool): Whether to reverse the direction of the vibrational
-                                   frequency vectors. Defaults to False.
 
     """
     required_params = ["qchem_cmd"]
     optional_params = [
         "multimode", "input_file", "output_file", "max_cores", "qclog_file",
-        "suffix", "scratch_dir", "save_scratch", "save_name", "max_errors",
-        "max_iterations", "max_molecule_perturb_scale", "reversed_direction",
-        "job_type", "handler_group", "gzipped_output"
+        "suffix", "calc_loc", "save_scratch", "max_errors", "job_type",
+        "handler_group", "gzipped_output", "backup", "linked",
+        "max_iterations", "max_molecule_perturb_scale"
     ]
 
     def run_task(self, fw_spec):
 
         # initialize variables
         qchem_cmd = env_chk(self["qchem_cmd"], fw_spec)
-        multimode = self.get("multimode", "openmp")
+        multimode = env_chk(self.get("multimode"), fw_spec)
+        if multimode == None:
+            multimode = "openmp"
         input_file = self.get("input_file", "mol.qin")
         output_file = self.get("output_file", "mol.qout")
-        max_cores = self.get("max_cores", 32)
+        max_cores = env_chk(self["max_cores"], fw_spec)
         qclog_file = self.get("qclog_file", "mol.qclog")
         suffix = self.get("suffix", "")
-        scratch_dir = env_chk(self.get("scratch_dir"), fw_spec)
-        if scratch_dir == None:
-            scratch_dir = "/dev/shm/qcscratch/"
+        calc_loc = env_chk(self.get("calc_loc"), fw_spec)
         save_scratch = self.get("save_scratch", False)
-        save_name = self.get("save_name", "default_save_name")
         max_errors = self.get("max_errors", 5)
         max_iterations = self.get("max_iterations", 10)
+        linked = self.get("linked", True)
+        backup = self.get("backup", True)
         max_molecule_perturb_scale = self.get("max_molecule_perturb_scale",
                                               0.3)
         job_type = self.get("job_type", "normal")
@@ -140,29 +146,42 @@ class RunQChemCustodian(FiretaskBase):
             jobs = [
                 QCJob(
                     qchem_command=qchem_cmd,
+                    max_cores=max_cores,
                     multimode=multimode,
                     input_file=input_file,
                     output_file=output_file,
-                    max_cores=max_cores,
                     qclog_file=qclog_file,
                     suffix=suffix,
-                    scratch_dir=scratch_dir,
+                    calc_loc=calc_loc,
                     save_scratch=save_scratch,
-                    save_name=save_name)
+                    backup=backup)
             ]
         elif job_type == "opt_with_frequency_flattener":
-            jobs = QCJob.opt_with_frequency_flattener(
-                qchem_command=qchem_cmd,
-                multimode=multimode,
-                input_file=input_file,
-                output_file=output_file,
-                qclog_file=qclog_file,
-                max_iterations=max_iterations,
-                max_molecule_perturb_scale=max_molecule_perturb_scale,
-                scratch_dir=scratch_dir,
-                save_scratch=save_scratch,
-                save_name=save_name,
-                max_cores=max_cores)
+            if linked:
+                jobs = QCJob.opt_with_frequency_flattener(
+                    qchem_command=qchem_cmd,
+                    multimode=multimode,
+                    input_file=input_file,
+                    output_file=output_file,
+                    qclog_file=qclog_file,
+                    max_iterations=max_iterations,
+                    linked=linked,
+                    save_final_scratch=save_scratch,
+                    max_cores=max_cores,
+                    calc_loc=calc_loc)
+            else:
+                jobs = QCJob.opt_with_frequency_flattener(
+                    qchem_command=qchem_cmd,
+                    multimode=multimode,
+                    input_file=input_file,
+                    output_file=output_file,
+                    qclog_file=qclog_file,
+                    max_iterations=max_iterations,
+                    max_molecule_perturb_scale=max_molecule_perturb_scale,
+                    linked=linked,
+                    save_final_scratch=save_scratch,
+                    max_cores=max_cores,
+                    calc_loc=calc_loc)
 
         else:
             raise ValueError("Unsupported job type: {}".format(job_type))
@@ -200,6 +219,7 @@ class RunQChemFake(FiretaskBase):
 
      """
     required_params = ["ref_dir"]
+    optional_params = ["input_file"]
 
     def run_task(self, fw_spec):
         self._verify_inputs()
@@ -207,10 +227,12 @@ class RunQChemFake(FiretaskBase):
         self._generate_outputs()
 
     def _verify_inputs(self):
+        input_file = self.get("input_file", "mol.qin")
         user_qin = QCInput.from_file(os.path.join(os.getcwd(), "mol.qin"))
 
         # Check mol.qin
-        ref_qin = QCInput.from_file(os.path.join(self["ref_dir"], "mol.qin"))
+        ref_qin = QCInput.from_file(os.path.join(self["ref_dir"], input_file))
+
         np.testing.assert_equal(ref_qin.molecule.species,
                                 user_qin.molecule.species)
         np.testing.assert_allclose(

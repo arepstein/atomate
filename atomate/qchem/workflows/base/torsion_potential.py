@@ -1,8 +1,5 @@
 # coding: utf-8
 
-from __future__ import absolute_import, division, print_function, \
-    unicode_literals
-
 # This module defines the torsion potential workflow
 
 
@@ -29,11 +26,9 @@ def get_wf_torsion_potential(molecule,
                              angles,
                              rem,
                              name="torsion_potential",
-                             qchem_cmd="qchem",
-                             multimode="openmp",
-                             input_file="mol.qin",
-                             output_file="mol.qout",
-                             max_cores=32,
+                             qchem_cmd=">>qchem_cmd<<",
+                             multimode=">>multimode<<",
+                             max_cores=">>max_cores<<",
                              db_file=None,
                              **kwargs):
     """
@@ -79,8 +74,6 @@ def get_wf_torsion_potential(molecule,
         name="initial_opt",
         qchem_cmd=qchem_cmd,
         multimode=multimode,
-        input_file=input_file,
-        output_file=output_file,
         max_cores=max_cores,
         db_file=db_file,
         **kwargs)
@@ -95,8 +88,6 @@ def get_wf_torsion_potential(molecule,
             name=("opt_" + str(int(angle))),
             qchem_cmd=qchem_cmd,
             multimode=multimode,
-            input_file=input_file,
-            output_file=output_file,
             max_cores=max_cores,
             db_file=db_file,
             parents=fw1,

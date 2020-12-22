@@ -1,6 +1,5 @@
 # coding: utf-8
 
-from __future__ import division, print_function, unicode_literals, absolute_import
 
 import os
 import unittest
@@ -54,12 +53,10 @@ class TestRunCalcQChem(AtomateTest):
             with patch("atomate.qchem.firetasks.run_calc.os.putenv"
                        ) as putenv_patch:
                 firetask = RunQChemDirect(
-                    qchem_cmd=">>qchem_cmd<<", scratch_dir=">>scratch_dir<<")
+                    qchem_cmd="qchem -slurm -nt 12 co_qc.in mol.qout", scratch_dir=">>scratch_dir<<")
                 firetask.run_task(
                     fw_spec={
                         "_fw_env": {
-                            "qchem_cmd":
-                            "qchem -slurm -nt 12 co_qc.in mol.qout",
                             "scratch_dir": "/this/is/a/test"
                         }
                     })
@@ -77,7 +74,8 @@ class TestRunCalcQChem(AtomateTest):
             firetask = RunQChemCustodian(
                 qchem_cmd="qchem",
                 input_file=os.path.join(module_dir, "..", "..", "test_files",
-                                        "co_qc.in"))
+                                        "co_qc.in"),
+                max_cores=32)
             firetask.run_task(fw_spec={})
             custodian_patch.assert_called_once()
             self.assertEqual(custodian_patch.call_args[0][0][0].as_dict(),
@@ -89,11 +87,13 @@ class TestRunCalcQChem(AtomateTest):
             self.assertEqual(custodian_patch.call_args[0][1][0].as_dict(),
                              QCJob(
                                  qchem_command="qchem",
+                                 max_cores=32,
                                  multimode="openmp",
                                  input_file=os.path.join(
                                      module_dir, "..", "..", "test_files",
                                      "co_qc.in"),
-                                 output_file="mol.qout").as_dict())
+                                 output_file="mol.qout",
+                                 scratch_dir="/dev/shm/qcscratch/").as_dict())
             self.assertEqual(custodian_patch.call_args[1], {
                 "max_errors": 5,
                 "gzipped_output": True
@@ -106,12 +106,16 @@ class TestRunCalcQChem(AtomateTest):
                 qchem_cmd=">>qchem_cmd<<",
                 scratch_dir=">>scratch_dir<<",
                 input_file=os.path.join(module_dir, "..", "..", "test_files",
-                                        "co_qc.in"))
+                                        "co_qc.in"),
+                max_cores=">>max_cores<<",
+                multimode=">>multimode<<")
             firetask.run_task(
                 fw_spec={
                     "_fw_env": {
                         "qchem_cmd": "qchem -slurm",
-                        "scratch_dir": "/this/is/a/test"
+                        "scratch_dir": "/this/is/a/test",
+                        "max_cores": 32,
+                        "multimode": "openmp"
                     }
                 })
             custodian_patch.assert_called_once()
@@ -124,6 +128,7 @@ class TestRunCalcQChem(AtomateTest):
             self.assertEqual(custodian_patch.call_args[0][1][0].as_dict(),
                              QCJob(
                                  qchem_command="qchem -slurm",
+                                 max_cores=32,
                                  multimode="openmp",
                                  input_file=os.path.join(
                                      module_dir, "..", "..", "test_files",
@@ -180,7 +185,7 @@ class TestRunCalcQChem(AtomateTest):
                    ) as custodian_patch:
             firetask = RunQChemCustodian(
                 qchem_cmd=">>qchem_cmd<<",
-                multimode="mpi",
+                multimode=">>multimode<<",
                 input_file=os.path.join(module_dir, "..", "..", "test_files",
                                         "co_qc.in"),
                 output_file="this_is_a_test.qout",
@@ -198,7 +203,9 @@ class TestRunCalcQChem(AtomateTest):
                 fw_spec={
                     "_fw_env": {
                         "qchem_cmd": "qchem -slurm",
-                        "scratch_dir": "/this/is/a/test"
+                        "scratch_dir": "/this/is/a/test",
+                        "max_cores": 32,
+                        "multimode": "mpi"
                     }
                 })
             custodian_patch.assert_called_once()
@@ -230,6 +237,7 @@ class TestRunCalcQChem(AtomateTest):
             ) as FF_patch:
                 firetask = RunQChemCustodian(
                     qchem_cmd="qchem",
+                    max_cores=32,
                     input_file=os.path.join(module_dir, "..", "..",
                                             "test_files", "FF_before_run",
                                             "test.qin"),
@@ -271,12 +279,14 @@ class TestRunCalcQChem(AtomateTest):
                         10,
                         "max_molecule_perturb_scale":
                         0.3,
+                        "linked":
+                        False,
                         "scratch_dir":
                         "/dev/shm/qcscratch/",
                         "save_scratch":
                         False,
                         "save_name":
-                        "default_save_name",
+                        "saved_scratch",
                         "max_cores":
                         32
                     })
@@ -289,6 +299,8 @@ class TestRunCalcQChem(AtomateTest):
             ) as FF_patch:
                 firetask = RunQChemCustodian(
                     qchem_cmd=">>qchem_cmd<<",
+                    max_cores=">>max_cores<<",
+                    multimode=">>multimode<<",
                     input_file=os.path.join(module_dir, "..", "..",
                                             "test_files", "FF_before_run",
                                             "test.qin"),
@@ -301,7 +313,9 @@ class TestRunCalcQChem(AtomateTest):
                     fw_spec={
                         "_fw_env": {
                             "qchem_cmd": "qchem -slurm",
-                            "scratch_dir": "/this/is/a/test"
+                            "scratch_dir": "/this/is/a/test",
+                            "max_cores": 32,
+                            "multimode": "openmp"
                         }
                     })
                 custodian_patch.assert_called_once()
@@ -336,12 +350,14 @@ class TestRunCalcQChem(AtomateTest):
                         10,
                         "max_molecule_perturb_scale":
                         0.3,
+                        "linked":
+                        False,
                         "scratch_dir":
                         "/this/is/a/test",
                         "save_scratch":
                         False,
                         "save_name":
-                        "default_save_name",
+                        "saved_scratch",
                         "max_cores":
                         32
                     })
@@ -398,6 +414,8 @@ class TestRunCalcQChem(AtomateTest):
                         1029,
                         "max_molecule_perturb_scale":
                         0.5,
+                        "linked":
+                        False,
                         "scratch_dir":
                         "/this/is/a/test",
                         "save_scratch":
@@ -434,12 +452,14 @@ class TestRunCalcQChem(AtomateTest):
                     scratch_dir=">>scratch_dir<<",
                     max_iterations=1029,
                     max_molecule_perturb_scale=0.5,
-                    multimode="mpi")
+                    multimode=">>multimode<<")
                 firetask.run_task(
                     fw_spec={
                         "_fw_env": {
                             "qchem_cmd": "qchem -slurm",
-                            "scratch_dir": "/this/is/a/test"
+                            "scratch_dir": "/this/is/a/test",
+                            "max_cores": 32,
+                            "multimode": "mpi"
                         }
                     })
                 custodian_patch.assert_called_once()
@@ -466,6 +486,8 @@ class TestRunCalcQChem(AtomateTest):
                         1029,
                         "max_molecule_perturb_scale":
                         0.5,
+                        "linked":
+                        False,
                         "scratch_dir":
                         "/this/is/a/test",
                         "save_scratch":
