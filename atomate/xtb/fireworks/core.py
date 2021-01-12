@@ -52,9 +52,9 @@ class ConformersFW(Firework):
             **kwargs: Other kwargs that are passed to Firework.__init__.
         """
 
-        crest_flags = crest_flags or {}
+        crest_flags = crest_flags or ""
         if molecule.charge != 0:
-            crest_flags["c"] = molecule.charge
+            crest_flags += " -c {} ".format(molecule.charge)
 
         t = []
         t.append(
