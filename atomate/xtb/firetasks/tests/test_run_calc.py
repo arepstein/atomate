@@ -33,11 +33,13 @@ class TestRunCalcCREST(AtomateTest):
         with patch("atomate.xtb.firetasks.run_calc.subprocess.call"
                    ) as subprocess_patch:
             firetask = RunCRESTDirect(
-                crest_cmd="crest crest_in.xyz -mquick> crest_out.out")
+                crest_cmd="crest",
+                crest_flags={"squick": ""}
+            )
             firetask.run_task(fw_spec={})
             subprocess_patch.assert_called_once()
             self.assertEqual(subprocess_patch.call_args[0][0],
-                             "crest crest_in.xyz -mquick> crest_out.out")
+                             "crest crest_in.xyz -squick  > crest_out.out")
 
     # def test_RunQChemCustodian_using_fw_spec_defaults(self):
     #     with patch("atomate.qchem.firetasks.run_calc.Custodian"

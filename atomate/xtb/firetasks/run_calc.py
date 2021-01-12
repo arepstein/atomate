@@ -36,10 +36,9 @@ class RunCRESTDirect(FiretaskBase):
         crest_cmd (str): The name of the full command line call to run.
 
     Optional params:
-        charge (int): The total charge of the structure
-        uhf (int): N_alpha - N_Beta for unrestricted Hartree Fock calculations
-        gbsa (str): The name of the gbsa solvent
-        speed (str): Methods for a crude conformer search: norotmd, quick, squick, -mquick
+        input_file (str): Name of the input file
+        output_file (str): Name of the output file
+        crest_flags (dict): Dict of flags to add, e.g. {"gbsa" : "H2O"}
     """
 
     required_params = ["crest_cmd"]
@@ -49,8 +48,19 @@ class RunCRESTDirect(FiretaskBase):
         cmd = env_chk(self["crest_cmd"], fw_spec)
         input_file = self.get("input_file", "crest_in.xyz")
         output_file = self.get("output_file", "crest_out.out")
-        crest_flags = self.get("crest_flags", "")
-        full_cmd = cmd + " " + input_file + " " + crest_flags + " > " + output_file
+        if "crest_flags" in self:
+            if isinstance(self.get("crest_flags"), dict):
+                flags_string = ""
+                for k, v in self.get("crest_flags").items():
+                    if v == "":
+                        flags_string += "-{} ".format(k)
+                    else:
+                        flags_string += "-{} {} ".format(k, v)
+
+
+            else:
+               raise TypeError("crest_flags must be a dict")
+        full_cmd = cmd + " " + input_file + " " + flags_string + " > " + output_file
 
         logger.info("Running command: {}".format(full_cmd))
         return_code = subprocess.call(full_cmd, shell=True)
