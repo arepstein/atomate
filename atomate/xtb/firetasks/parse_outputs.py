@@ -1,6 +1,7 @@
 # coding: utf-8
 
-from __future__ import division, print_function, unicode_literals, absolute_import
+from __future__ import division, print_function, unicode_literals, \
+    absolute_import
 
 import json
 import os
@@ -13,6 +14,7 @@ from atomate.xtb.database import CRESTCalcDb
 from atomate.utils.utils import env_chk
 from atomate.utils.utils import get_logger
 from atomate.xtb.drones import CRESTDrone
+from atomate.qchem.fireworks.core import OptimizeFW
 
 __author__ = "Alex Epstein"
 __copyright__ = "Copyright 2018, The Materials Project"
@@ -44,10 +46,13 @@ class CRESTToDb(FiretaskBase):
             Supports env_chk. Default: write data to JSON file.
         fw_spec_field (str): if set, will update the task doc with the contents
             of this key in the fw_spec.
+        spawn_qchem_max (int): Spawn QChem opts for spawn_qchem_max lowest
+        energy conformers
     """
     optional_params = [
         "calc_dir", "calc_loc", "input_file", "output_file",
-        "additional_fields", "db_file", "fw_spec_field", "multirun"
+        "additional_fields", "db_file", "fw_spec_field", "multirun",
+        "spawn_qchem_max"
     ]
 
     def run_task(self, fw_spec):
@@ -109,8 +114,26 @@ class CRESTToDb(FiretaskBase):
             else:
                 raise RuntimeError("Unknown option for defuse_unsuccessful: "
                                    "{}".format(defuse_unsuccessful))
+        if "spawn_qchem_max" in self:
+            n_max = self["spawn_qchem_max"]
+            sorted_structs = task_doc["output"]["sorted_structures_energies"]
+            lowest_n_structs = [l[0][0] for l in sorted_structs][:n_max]
+            fws_to_spawn = []
+            for i, m in enumerate(lowest_n_structs):
+                qc_opt_fw = OptimizeFW(
+                    molecule=m,
+                    name=task_doc["smiles"] + "_{}".format(i),
+                    qchem_cmd=">>qchem_cmd<<",
+                    multimode=">>multimode<<",
+                    max_cores=">>max_cores<<",
+                    qchem_input_params={"dft_rung": 3,
+                                        "basis_set": 'def2-svpd'},
+                    db_file=None
+                )
+                fws_to_spawn.append(qc_opt_fw)
 
         return FWAction(
             stored_data={"task_id": task_doc.get("task_id", None)},
             defuse_children=defuse_children,
-            update_spec=update_spec)
+            update_spec=update_spec,
+            additions=fws_to_spawn)

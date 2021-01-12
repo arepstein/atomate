@@ -25,7 +25,7 @@ def get_wf_simpleConformerSearch(molecule,
                                  db_file=">>db_file<<",
                                  **kwargs):
     """
-    Returns a workflow to the torsion potential for a molecule.
+    Returns a workflow to search for the lowest conformer of molecu;e.
 
     Firework 1 : run CREST conformer search conformerFW
                  parse directory and insert into db,
@@ -45,7 +45,6 @@ def get_wf_simpleConformerSearch(molecule,
         name="superquick_conformer_search",
         crest_cmd=crest_cmd,
         db_file=db_file,
-        crest_flags="-squick"
     )
 
     wfname = "{}:{}".format(molecule.composition.reduced_formula, name)
